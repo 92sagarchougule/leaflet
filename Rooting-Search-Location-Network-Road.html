@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Map with Search and Routing</title>
+
+    <!-- Leaflet CSS for styling the map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+
+    <style>
+        /* Styling for the navigation bar */
+        .navbar {
+            background-color: #17a2b8; /* Cyan blue background */
+            color: #ffffff; /* White text */
+            padding: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* Styling for the logo in the navigation bar */
+        .navbar-brand {
+            display: flex;
+            align-items: center;
+            padding-left: 20px;
+        }
+
+        .navbar-brand img {
+            width: 80px; /* Logo width */
+            height: 55px; /* Logo height */
+            margin-right: 15px;
+            border-radius: 50%; /* Make the logo circular */
+            border: 2px solid #ffffff; /* White border around the logo */
+        }
+
+        /* Styling for the file upload button */
+        .file-upload {
+            display: flex;
+            align-items: center;
+        }
+
+        .file-upload input[type="file"] {
+            display: none; /* Hide the default file input */
+        }
+
+        .file-upload label {
+            background-color: #ffffff; /* White background for the button */
+            color: #17a2b8; /* Cyan blue text */
+            padding: 8px 12px;
+            border-radius: 5px; /* Rounded corners */
+            cursor: pointer; /* Pointer cursor on hover */
+            font-weight: bold;
+            font-family: 'Trebuchet MS', sans-serif; /* Font style */
+        }
+
+        /* Styling for the map container */
+        #map {
+            width: 100vw; /* Full width */
+            height: 70vh; /* 70% of viewport height */
+            margin-top: 10px;
+            border: 2px solid #17a2b8; /* Cyan blue border */
+            border-radius: 10px; /* Rounded corners */
+        }
+
+        /* Styling for the buttons */
+        .button {
+            background-color: #ffffff; /* White background */
+            color: #17a2b8; /* Cyan blue text */
+            padding: 8px 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            font-family: 'Trebuchet MS', sans-serif;
+            margin: 0 5px; /* Space between buttons */
+        }
+
+        /* Styling for the WMS URL input */
+        .wms-upload {
+            display: flex;
+            align-items: center;
+            margin-left: 20px;
+        }
+
+        .wms-upload input[type="text"] {
+            padding: 8px;
+            border-radius: 5px;
+            border: 1px solid #17a2b8;
+            font-family: 'Trebuchet MS', sans-serif;
+            margin-right: 10px;
+        }
+
+        /* Styling for the search bar */
+        .search-bar {
+            display: flex;
+            align-items: center;
+            margin-right: 20px;
+        }
+
+        .search-bar input[type="text"] {
+            padding: 8px;
+            border-radius: 5px;
+            border: 1px solid #17a2b8;
+            font-family: 'Trebuchet MS', sans-serif;
+            margin-right: 10px;
+            width: 250px;
+        }
+
+    </style>
+</head>
+<body>
+    <!-- Navigation bar -->
+    <nav class="navbar">
+        <!-- Logo and title in the navbar -->
+        <div class="navbar-brand">
+            <img src="_e2875c61-04db-49c2-b751-7d8bf2365dad.jpg" alt="Logo">
+            <span>GIS Interaction</span>
+        </div>
+        <!-- Search bar for routing -->
+        <div class="search-bar">
+            <input type="text" id="fromLocation" placeholder="From: Search Place" />
+            <input type="text" id="toLocation" placeholder="To: Search Place" />
+            <button class="button" onclick="searchAndRoute()">Search & Route</button>
+        </div>
+        <!-- Refresh button -->
+        <button class="button" onclick="location.reload();">Refresh</button>
+    </nav>
+
+    <!-- Container for the map -->
+    <div id="map"></div>
+
+    <!-- Leaflet JavaScript library for the map -->
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <!-- Papa Parse library for parsing CSV files -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <!-- Leaflet Routing Machine library for routing functionality -->
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+
+    <script>
+        // Initialize the map centered on Gadag, Karnataka
+        var map = L.map('map').setView([15.4239, 75.6297], 12);
+
+        // Define base layers
+        var openStreetMap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
+        });
+
+        var esriSatellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: '&copy; <a href="https://www.esri.com/">ESRI</a>'
+        });
+
+        // Add default base layer
+        openStreetMap.addTo(map);
+
+        // Add layer control
+        L.control.layers({
+            "OpenStreetMap": openStreetMap,
+            "ESRI Satellite": esriSatellite
+        }).addTo(map);
+
+        var routingControl; // Variable to store the routing control instance
+
+        // Function to search for locations and create a route
+        function searchAndRoute() {
+            var fromPlace = document.getElementById('fromLocation').value;
+            var toPlace = document.getElementById('toLocation').value;
+
+            if (fromPlace && toPlace) {
+                getLatLng(fromPlace, function(fromLatLng) {
+                    getLatLng(toPlace, function(toLatLng) {
+                        if (fromLatLng && toLatLng) {
+                            if (routingControl) {
+                                map.removeControl(routingControl); // Remove any existing route
+                            }
+
+                            routingControl = L.Routing.control({
+                                waypoints: [
+                                    L.latLng(fromLatLng.lat, fromLatLng.lng),
+                                    L.latLng(toLatLng.lat, toLatLng.lng)
+                                ],
+                                routeWhileDragging: true // Allow the route to be updated while dragging
+                            }).addTo(map);
+                        } else {
+                            alert('Failed to find one or both locations. Please try again.');
+                        }
+                    });
+                });
+            } else {
+                alert('Please enter both the starting and destination locations.');
+            }
+        }
+
+        // Function to get the latitude and longitude of a place using OpenStreetMap Nominatim
+        function getLatLng(place, callback) {
+            var url = 'https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(place);
+
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    if (data && data.length > 0) {
+                        callback({ lat: data[0].lat, lng: data[0].lon });
+                    } else {
+                        callback(null);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching location data:', error);
+                    callback(null);
+                });
+        }
+    </script>
+</body>
+</html>
